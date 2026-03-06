@@ -1,6 +1,7 @@
 {
     "version": 2,
-    "framework": "laravel",
+    "framework": null,
+    "buildCommand": "npm install && npm run build",
     "outputDirectory": "public",
     "functions": {
         "api/index.php": {
