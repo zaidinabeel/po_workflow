@@ -1,126 +1,87 @@
 # ProcureFlow Server Deployment Guide
 
-This guide provides step-by-step instructions for deploying the ProcureFlow Laravel application to a Linux server (Ubuntu/Debian recommended).
+This guide provides step-by-step instructions for deploying the ProcureFlow Laravel application to a Linux server or **Hostinger Shared Hosting**.
 
-## 1. Server Requirements
-Before starting, ensure your server has the following installed:
-- **PHP 8.2+** with extensions: `ctype`, `curl`, `dom`, `fileinfo`, `filter`, `hash`, `mbstring`, `openssl`, `pcre`, `pdo`, `session`, `tokenizer`, `xml`, `sqlite3`
-- **Nginx** or **Apache**
-- **Composer** (PHP Package Manager)
-- **Node.js & NPM** (for compiling assets)
-- **Git**
-
-## 2. Server Preparation
-
-### Install Dependencies (Ubuntu Example)
+## 🚀 Fast Track (Ubuntu/VPS Copy-Paste)
+If you are on a fresh Ubuntu server, run these as root/sudo:
 ```bash
-sudo apt update
-sudo apt install -y php8.2-fpm php8.2-mysql php8.2-sqlite3 php8.2-curl php8.2-xml php8.2-mbstring php8.2-zip unzip git nginx nodejs npm
-```
+# 1. Install PHP 8.2 & Nginx
+sudo apt update && sudo apt install -y php8.2-fpm php8.2-sqlite3 php8.2-curl php8.2-xml php8.2-mbstring php8.2-zip unzip git nginx nodejs npm
 
-## 3. Deployment Steps
+# 2. Clone & Install
+cd /var/www && git clone https://github.com/zaidinabeel/po_workflow.git
+cd po_workflow && composer install --optimize-autoloader --no-dev
 
-### Step 1: Clone the Repository
-Navigate to your web directory and clone the code.
-```bash
-cd /var/www
-git clone https://github.com/zaidinabeel/po_workflow.git
-cd po_workflow
-```
-
-### Step 2: Install Composer Dependencies
-```bash
-composer install --optimize-autoloader --no-dev
-```
-
-### Step 3: Configure Environment
-Copy the example environment file and generate an application key.
-```bash
-cp .env.example .env
-php artisan key:generate --ansi
-```
-> [!IMPORTANT]
-> Edit `.env` and set `APP_ENV=production`, `APP_DEBUG=false`, and `APP_URL=https://yourdomain.com`.
-> Ensure your SMTP credentials (Brevo) are correctly set in the `.env`.
-
-### Step 4: Setup Database (SQLite)
-Create the database file and set correct permissions.
-```bash
+# 3. Environment & Database
+cp .env.example .env && php artisan key:generate
 touch database/database.sqlite
-chmod -R 775 storage bootstrap/cache database
-chown -R www-data:www-data storage bootstrap/cache database
-```
+chmod -R 775 storage bootstrap/cache database && chown -R www-data:www-data .
 
-### Step 5: Run Migrations
-```bash
+# 4. Migrate & Build
 php artisan migrate --force
+npm install && npm run build
 ```
 
-### Step 6: Compile Assets (Vite)
+---
+
+## 🏨 Hostinger Shared Hosting Deployment
+Deploying to Hostinger (hPanel) is slightly different as you don't have full root access.
+
+### Step 1: Uploading Files
+1.  **Option A (Git)**: Use the "Advanced" > "GIT" section in hPanel to clone: `https://github.com/zaidinabeel/po_workflow.git`.
+2.  **Option B (Manual)**: Zip your local project (excluding `vendor` and `node_modules`), upload it via "File Manager", and extract it.
+
+### Step 2: Set PHP Version
+Go to **"Advanced" > "PHP Configuration"** and ensure **PHP 8.2** or higher is selected.
+
+### Step 3: Configure .env
+1.  In File Manager, find `.env.example`, rename it to `.env`.
+2.  Edit `.env` and update:
+    - `APP_ENV=production`
+    - `APP_DEBUG=false`
+    - `APP_URL=https://your-domain.com`
+    - **SMTP Settings**: Ensure your Brevo credentials from the previous task are entered.
+
+### Step 4: Run Artisan Commands (SSH)
+Hostinger provides SSH access. Connect via terminal and run:
 ```bash
-npm install
-npm run build
+# Navigate to project
+cd domains/your-domain.com/public_html/po_workflow
+
+# Install dependencies (if not done)
+composer install --no-dev
+
+# Generate Key & Migrate
+php artisan key:generate
+php artisan migrate --force
+
+# Link storage
+php artisan storage:link
 ```
+*Note: If `php` command fails, use the full path provided in hPanel (e.g., `/usr/local/bin/php8.2 artisan ...`).*
 
-## 4. Web Server Configuration (Nginx)
-Create a new Nginx configuration file: `/etc/nginx/sites-available/procureflow`
+### Step 5: Handling the "public" folder
+On Hostinger Shared hosting, you often need the contents of the `public` folder to be in `public_html`.
+1.  **Recommended**: Keep the project in a subdirectory and use an `.htaccess` file in your `public_html` to point to `po_workflow/public`.
+2.  Alternatively, update your Domain's **Base Directory** in Hostinger to point to `/po_workflow/public`.
 
-```nginx
-server {
-    listen 80;
-    server_name yourdomain.com;
-    root /var/www/po_workflow/public;
+---
 
-    add_header X-Frame-Options "SAMEORIGIN";
-    add_header X-Content-Type-Options "nosniff";
+## 🛠 Required Commands Reference
 
-    index index.php;
+| Action | Command |
+| :--- | :--- |
+| **Setup Env** | `cp .env.example .env && php artisan key:generate` |
+| **Clear Cache** | `php artisan config:clear && php artisan cache:clear` |
+| **Production Cache** | `php artisan config:cache && php artisan route:cache && php artisan view:cache` |
+| **Run Migrations** | `php artisan migrate --force` |
+| **Symlink Storage** | `php artisan storage:link` |
+| **Fix Permissions** | `chmod -R 775 storage database && chown -R www-data:www-data .` |
 
-    charset utf-8;
+---
 
-    location / {
-        try_files $uri $uri/ /index.php?$query_string;
-    }
-
-    location = /favicon.ico { access_log off; log_not_found off; }
-    location = /robots.txt  { access_log off; log_not_found off; }
-
-    error_page 404 /index.php;
-
-    location ~ \.php$ {
-        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
-        include fastcgi_params;
-    }
-
-    location ~ /\.(?!well-known).* {
-        deny all;
-    }
-}
-```
-Enable the site and restart Nginx:
-```bash
-sudo ln -s /etc/nginx/sites-available/procureflow /etc/nginx/sites-enabled/
-sudo nginx -t
-sudo system_service nginx restart
-```
-
-## 5. SSL / HTTPS (Certbot)
-It is highly recommended to use HTTPS for the email triggers and secure vendor links to work correctly.
-```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d yourdomain.com
-```
-
-## 6. Optimization for Production
-Once everything is working, run these commands to speed up the app:
-```bash
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
-```
-
-## 7. Troubleshooting
-- **Permission Errors**: Ensure `www-data` (or your web user) has write access to `storage`, `bootstrap/cache`, and `database/database.sqlite`.
-- **500 Errors**: Check logs at `storage/logs/laravel.log` for specific errors.
-- **SQLite locked**: This happens if multiple processes try to write at once; ensure the `database` folder itself is writable by the web server.
+## 📧 Email Configuration Troubleshooting
+If emails are not sending:
+1.  Run `php artisan config:clear`.
+2.  Check `storage/logs/laravel.log` for SMTP timeout errors.
+3.  Ensure your Brevo account is active and not in "Suspended" or "New Account Review" mode.
